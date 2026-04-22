@@ -151,6 +151,7 @@
         .edit-btn, .delete-btn { background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
         .edit-btn { color: #3b82f6; }
         .delete-btn { color: #dc2626; }
+        .empty-row td { text-align: center; padding: 30px; color: #94a3b8; }
         
         .report-cards {
             display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px;
@@ -210,7 +211,7 @@
             <div class="logo-icon"><i class="fas fa-store"></i></div>
             <div class="logo-text">
                 <h1>MINIMARKET KASIR</h1>
-                <p>Alfamart Style Solution</p>
+                <p>Sistem Kasir Terintegrasi</p>
             </div>
         </div>
         <div class="header-actions">
@@ -247,7 +248,7 @@
                     <input type="text" id="search-product" placeholder="Cari produk (nama/barcode)...">
                 </div>
                 <div class="products-grid" id="products-grid">
-                    <div style="text-align:center; padding:30px">Loading...</div>
+                    <div style="text-align:center; padding:30px">Belum ada produk. Silakan tambah produk di menu Manajemen.</div>
                 </div>
             </div>
             
@@ -330,7 +331,9 @@
             <div class="products-table">
                 <table id="products-table">
                     <thead><tr><th>Kode</th><th>Nama</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Aksi</th></tr></thead>
-                    <tbody id="products-table-body"></tbody>
+                    <tbody id="products-table-body">
+                        <tr class="empty-row"><td colspan="6">Belum ada data produk. Silakan tambah produk.</td></tr>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -356,7 +359,9 @@
                 <div class="products-table">
                     <table width="100%" id="report-table">
                         <thead><tr><th>Tanggal</th><th>Jam</th><th>ID</th><th>Items</th><th>Total</th></tr></thead>
-                        <tbody id="report-body"></tbody>
+                        <tbody id="report-body">
+                            <tr class="empty-row"><td colspan="5">Belum ada transaksi. Silakan lakukan transaksi penjualan.</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -392,27 +397,14 @@
     // GANTI URL INI dengan URL Google Apps Script Anda setelah deploy
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzdw35-zrhmsCbtX2tom1SW1JYOyPkJosElHBnHYWZ15XRU7u2pVDCD79OyLUuhkCa6pg/exec";
     
-    let products = [];
+    // ==================== DATA AWAL KOSONG ====================
+    let products = [];      // Mulai dengan data produk kosong
     let categories = ["Semua"];
     let cart = [];
-    let transactions = [];
+    let transactions = [];  // Mulai dengan data transaksi kosong
     let activeCategory = "Semua";
     let searchQuery = "";
     let isOnline = true;
-    
-    // Default products
-    const defaultProducts = [
-        { id: 1, code: "8999999001", name: "Indomie Goreng", category: "Makanan", price: 3500, stock: 100 },
-        { id: 2, code: "8999999002", name: "Indomie Kuah", category: "Makanan", price: 3500, stock: 100 },
-        { id: 3, code: "8999999003", name: "Aqua 600ml", category: "Minuman", price: 4000, stock: 80 },
-        { id: 4, code: "8999999004", name: "Teh Pucuk 350ml", category: "Minuman", price: 4500, stock: 60 },
-        { id: 5, code: "8999999005", name: "Sampoerna Mild 16", category: "Rokok", price: 28000, stock: 50 },
-        { id: 6, code: "8999999006", name: "Maroon Surya 16", category: "Rokok", price: 25000, stock: 45 },
-        { id: 7, code: "8999999007", name: "Lifebuoy Sabun", category: "Perawatan", price: 4500, stock: 70 },
-        { id: 8, code: "8999999008", name: "Pepsodent", category: "Perawatan", price: 12000, stock: 40 },
-        { id: 9, code: "8999999009", name: "Rinso Cair", category: "Rumah Tangga", price: 15000, stock: 35 },
-        { id: 10, code: "8999999010", name: "So Klin", category: "Rumah Tangga", price: 8000, stock: 55 }
-    ];
     
     // ==================== FUNGSI UTAMA ====================
     function formatRp(n) { return "Rp " + (n || 0).toLocaleString("id-ID"); }
@@ -427,19 +419,22 @@
     setInterval(updateDateTime, 1000);
     updateDateTime();
     
-    // ==================== LOAD DATA ====================
+    // ==================== LOAD DATA DARI LOCAL STORAGE ====================
     function loadData() {
         const savedProducts = localStorage.getItem("minimarket_products");
-        if (savedProducts) {
+        if (savedProducts && JSON.parse(savedProducts).length > 0) {
             products = JSON.parse(savedProducts);
         } else {
-            products = [...defaultProducts];
+            products = []; // Tetap kosong
             saveProducts();
         }
         
         const savedTransactions = localStorage.getItem("minimarket_transactions");
-        if (savedTransactions) {
+        if (savedTransactions && JSON.parse(savedTransactions).length > 0) {
             transactions = JSON.parse(savedTransactions);
+        } else {
+            transactions = []; // Tetap kosong
+            saveTransactions();
         }
         
         renderCategories();
@@ -453,12 +448,19 @@
     function saveTransactions() { localStorage.setItem("minimarket_transactions", JSON.stringify(transactions)); }
     function updateProductCount() { document.getElementById("product-count").innerHTML = products.length + " produk"; }
     
-    function getCategories() { return ["Semua", ...new Set(products.map(p => p.category).filter(c => c))]; }
+    function getCategories() { 
+        const cats = products.map(p => p.category).filter(c => c);
+        return ["Semua", ...new Set(cats)]; 
+    }
     
     function renderCategories() {
         const cats = getCategories();
         const container = document.getElementById("category-bar");
-        container.innerHTML = cats.map(c => `<span class="cat-chip ${activeCategory === c ? 'active' : ''}" data-cat="${c}">${c}</span>`).join("");
+        if (cats.length === 1 && cats[0] === "Semua") {
+            container.innerHTML = `<span class="cat-chip active" data-cat="Semua">Semua</span>`;
+        } else {
+            container.innerHTML = cats.map(c => `<span class="cat-chip ${activeCategory === c ? 'active' : ''}" data-cat="${c}">${c}</span>`).join("");
+        }
         document.querySelectorAll(".cat-chip").forEach(chip => {
             chip.onclick = () => { activeCategory = chip.dataset.cat; renderCategories(); renderProducts(); };
         });
@@ -470,7 +472,10 @@
                    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code.includes(searchQuery));
         });
         const grid = document.getElementById("products-grid");
-        if(filtered.length === 0) { grid.innerHTML = "<div style='text-align:center;padding:30px'>Tidak ada produk</div>"; return; }
+        if(filtered.length === 0) { 
+            grid.innerHTML = "<div style='text-align:center;padding:30px'>Tidak ada produk. Silakan tambah produk di menu Manajemen.</div>"; 
+            return; 
+        }
         grid.innerHTML = filtered.map(p => `
             <div class="product-item" data-id="${p.id}">
                 <div class="product-name">${p.name}</div>
@@ -548,7 +553,7 @@
     // ==================== PROCESS PAYMENT & SYNC TO APPS SCRIPT ====================
     async function syncTransactionToServer(transData) {
         try {
-            const response = await fetch(APPS_SCRIPT_URL, {
+            await fetch(APPS_SCRIPT_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
@@ -562,9 +567,13 @@
     }
     
     async function syncProductsToServer() {
+        if (products.length === 0) {
+            toast("Tidak ada produk untuk disinkronkan");
+            return;
+        }
         showLoad(true);
         try {
-            const response = await fetch(`${APPS_SCRIPT_URL}?action=syncProducts&data=${JSON.stringify(products)}`);
+            await fetch(`${APPS_SCRIPT_URL}?action=syncProducts&data=${JSON.stringify(products)}`);
             toast("✅ Data produk tersinkronisasi!");
         } catch(e) {
             toast("⚠️ Gagal sync, data tersimpan lokal");
@@ -647,10 +656,14 @@
     // ==================== MANAGE PRODUCTS ====================
     function renderProductsTable() {
         const tbody = document.getElementById("products-table-body");
+        if (products.length === 0) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6">Belum ada data produk. Silakan tambah produk.<td></tr>';
+            return;
+        }
         tbody.innerHTML = products.map(p => `
             <tr>
-                <td>${p.code}</td><td>${p.name}</td><td>${p.category}</td>
-                <td>${formatRp(p.price)}</td><td>${p.stock}</td>
+                <td>${p.code}</td> <td>${p.name}</td> <td>${p.category}</td>
+                <td>${formatRp(p.price)}</td> <td>${p.stock}</td>
                 <td>
                     <button class="edit-btn" data-id="${p.id}"><i class="fas fa-edit"></i></button>
                     <button class="delete-btn" data-id="${p.id}"><i class="fas fa-trash"></i></button>
@@ -663,13 +676,13 @@
     }
     
     function addNewProduct() {
-        const code = document.getElementById("new-code").value;
-        const name = document.getElementById("new-name").value;
+        const code = document.getElementById("new-code").value.trim();
+        const name = document.getElementById("new-name").value.trim();
         const category = document.getElementById("new-category").value;
         const price = parseInt(document.getElementById("new-price").value);
         const stock = parseInt(document.getElementById("new-stock").value);
         
-        if(!code || !name || !price) { toast("Isi semua data!"); return; }
+        if(!code || !name || !price) { toast("Isi semua data (Kode, Nama, Harga)!"); return; }
         
         const newId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
         products.push({ id: newId, code, name, category, price, stock });
@@ -727,13 +740,20 @@
         document.getElementById("avg-transaction").innerHTML = filtered.length > 0 ? formatRp(totalOmzet / filtered.length) : "Rp 0";
         
         const tbody = document.getElementById("report-body");
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Belum ada transaksi. Silakan lakukan transaksi penjualan.</td></tr>';
+            return;
+        }
         tbody.innerHTML = filtered.map(t => `
-            <tr><td>${t.tanggal}</td><td>${t.jam}</td><td>${t.id}</td>
-            <td>${t.items.length} item</td><td>${formatRp(t.grandTotal)}</td></tr>
+            <tr>
+                <td>${t.tanggal}</td> <td>${t.jam}</td> <td>${t.id}</td>
+                <td>${t.items.length} item</td> <td>${formatRp(t.grandTotal)}</td>
+            </tr>
         `).join("");
     }
     
     function exportReport() {
+        if (transactions.length === 0) { toast("Tidak ada data transaksi untuk diexport"); return; }
         let csv = "Tanggal,Jam,ID,Total Item,Total Harga\n";
         transactions.forEach(t => {
             csv += `${t.tanggal},${t.jam},${t.id},${t.items.length},${t.grandTotal}\n`;
@@ -747,6 +767,7 @@
     }
     
     function exportProducts() {
+        if (products.length === 0) { toast("Tidak ada data produk untuk diexport"); return; }
         let csv = "Kode,Nama,Kategori,Harga,Stok\n";
         products.forEach(p => {
             csv += `${p.code},${p.name},${p.category},${p.price},${p.stock}\n`;
